@@ -1,0 +1,394 @@
+#!/usr/bin/env python3
+
+##########################################################
+#
+# Software by Joshua T Berryman and Amirhossein Taghavi
+# (c) University Luxembourg 2017
+#
+# Licence: Attribution-ShareAlike 4.0 International
+#
+# The full licence is available at this link:
+# https://creativecommons.org/licenses/by-sa/4.0/legalcode
+#
+# In summary you may freely use and modify the software,
+# providing you do not seek to distribute derivative works
+# on more restrictive terms, and providing also that you
+# attribute the original authors.
+#
+# The preferred citation is:
+#
+# A Taghavi, P van der Schoot and J T Berryman,  
+# QRB Discovery, 2017.
+#
+##########################################################
+#
+# A useful source of input data is Friedman & Honig 1995:
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC1236383/
+#
+# Requirements to run this program are python3 and numpy, 
+# freely available from many sources.
+#
+# For usage information set this file as executable and
+# run it in the console without arguments.
+#
+##########################################################
+
+
+import numpy as np
+import random
+import sys
+
+##define 1/kBT given energy units kcal/mol and 
+##temperature 300K.
+beta         = 1./0.59616108
+
+accept_count = 0
+reject_count = 0
+
+##define an approximate number of
+##sweeps to converge the stack break 
+##distribution
+converge_timescale = 30
+
+##print usage
+if len(sys.argv) < 4:
+    print("""
+Usage: ./triplet_propensity.py input_step_energy_file test_codon outfile 
+
+Where: [input_step_energy_file] has bp step energies in the format
+        STEP  DG
+        eg:
+AA -6.53
+AT -5.32
+AG -7.03
+.
+.
+.
+       A good paper for bp step energies is:
+                   Friedman & Honig, BiophysJ 1995
+
+       [test_codon] has the format eg GGC  
+       [outfile]    contains log data and output
+""")
+    exit()
+
+#get the number of aa from command line.
+N_per_seq = 60 
+print("setting N_per_seq",N_per_seq)
+
+input_data = sys.argv[1]
+
+#finding triplet propensity for this codon:
+test_codon = sys.argv[2]
+outfile    = sys.argv[3]
+
+#how many independent runs to average
+n_iter = 1000
+print("set n_iter: %i" % n_iter)
+
+bases = ['A', 'T', 'G', 'C']
+wc    = {
+'C' : 'G',
+'G' : 'C',
+'A' : 'T',
+'T' : 'A',
+}
+
+##read stack break energies 
+data = {}
+f = open(input_data, "r")
+for line in f:
+   if line[0] == "#":
+       continue
+   L = line.split()
+   if len(L) < 2:
+       continue
+   data[L[0]] = float(L[1]) 
+f.close()
+
+f = open(outfile, "w")
+f.write("#i_iter n_iter test_codon p(trip)\n")
+
+
+#complementary base-pair stack energies
+#scaling by kBT
+honig_comp = {}
+for k in data:
+    u             = data[k] 
+    complement    = wc[k[1]]+wc[k[0]]
+    u            += data[complement] 
+    honig_comp[k] = u * beta
+    print (k+"."+complement+" : "+str(u))    
+
+
+#The "universal" genetic code
+code = {
+'GTA' : 'V',
+'GTT' : 'V',
+'GTG' : 'V',
+'GTC' : 'V',
+'GCA' : 'A',
+'GCT' : 'A',
+'GCG' : 'A',
+'GCC' : 'A',
+'GAA' : 'E',
+'GAG' : 'E',
+'GAT' : 'D',
+'GAC' : 'D',
+'GGA' : 'G',
+'GGT' : 'G',
+'GGG' : 'G',
+'GGC' : 'G',
+'ATA' : 'I',
+'ATT' : 'I',
+'ATG' : 'M',
+'ATC' : 'I',
+'ACA' : 'T',
+'ACT' : 'T',
+'ACG' : 'T',
+'ACC' : 'T',
+'AAA' : 'K',
+'AAT' : 'N',
+'AAG' : 'K',
+'AAC' : 'N',
+'AGA' : 'R',
+'AGT' : 'S',
+'AGG' : 'R',
+'AGC' : 'S',
+'CTA' : 'L',
+'CTT' : 'L',
+'CTG' : 'L',
+'CTC' : 'L',
+'CCA' : 'P',
+'CCT' : 'P',
+'CCG' : 'P',
+'CCC' : 'P',
+'CAA' : 'Q',
+'CAT' : 'H',
+'CAG' : 'Q',
+'CAC' : 'H',
+'CGA' : 'R',
+'CGT' : 'R',
+'CGG' : 'R',
+'CGC' : 'R',
+'TTA' : 'L',
+'TTT' : 'F',
+'TTG' : 'L',
+'TTC' : 'F',
+'TCA' : 'S',
+'TCT' : 'S',
+'TCG' : 'S',
+'TCC' : 'S',
+'TAA' : 'X',
+'TAT' : 'Y',
+'TAG' : 'X',
+'TAC' : 'Y',
+'TGA' : 'X',
+'TGT' : 'C',
+'TGG' : 'Y',
+'TGC' : 'C',
+}
+
+phase_one_aa = {
+'V' : 1,
+'A' : 1,
+'D' : 1,
+'G' : 1,
+'E' : 1,
+'S' : 1,
+'P' : 1,
+'L' : 1,
+'I' : 1,
+'T' : 1,
+}
+
+modern_aa  = {
+'K' : 1,
+'K' : 1,
+'N' : 1,
+'N' : 1,
+'R' : 1,
+'R' : 1,
+'R' : 1,
+'R' : 1,
+'R' : 1,
+'R' : 1,
+'Q' : 1,
+'Q' : 1,
+'H' : 1,
+'H' : 1,
+'F' : 1,
+'F' : 1,
+'X' : 1,
+'X' : 1,
+'X' : 1,
+'Y' : 1,
+'Y' : 1,
+'C' : 1,
+'C' : 1,
+}
+
+phase_zero_aa = {
+'V' : 1,
+'A' : 1,
+'D' : 1,
+'G' : 1,
+}
+
+def print_posns(posns):
+    for i in range(0,len(posns),3):
+        if i % 12 != 9:
+            print("%i %i %i . " % (posns[i],posns[i+1],posns[i+2]), end="")
+        else:
+            print("%i %i %i" % (posns[i],posns[i+1],posns[i+2]))
+    print("%i %i" % (len(posns),np.sum(posns)))
+
+#make a list of phase one amino acids
+p1_aa_list = []
+for k in phase_one_aa.keys():
+    p1_aa_list.append(k)
+
+##make a reverse code, aa to dna:
+reverse_code = {}
+for codon in code.keys():
+    aa = code[codon]
+    if aa not in reverse_code:
+        reverse_code[aa] = []
+    reverse_code[aa].append(codon)
+
+##estimate p for sigma break pattern
+count     = 0
+histogram = 0
+
+for i_iter in range(n_iter):
+
+    aa_sequence             = []
+    dna_sequence            = []
+    complement_sequence     = []
+
+    ##pick a random series of aa from the phase one list 
+    aaList    = np.random.randint(len(p1_aa_list), size=(N_per_seq))
+    for i in range(N_per_seq):
+      aa        = p1_aa_list[aaList[i]] 
+      codonList = reverse_code[aa]
+      codon        = np.random.choice(codonList)
+      dna_sequence = dna_sequence + [codon[0], codon[1], codon[2]]
+
+
+    ##make the sequence self-complementary (palindromic)
+    ##so that there is no G/C content bias between
+    ##then sense and anti-sense strands.
+    L = len(dna_sequence)
+    for i in range(L):
+        complement_sequence.append(wc[dna_sequence[L-1-i]])
+    dna_sequence          += complement_sequence
+    complement_sequence    = dna_sequence[:L] + complement_sequence
+    L                      = 2*L
+
+    for b in ["C", "G", "A", "T"]:
+        print("count %s: %i ,complement: %i" %\
+           (b,dna_sequence.count(b),complement_sequence.count(b)))
+
+    ##single test codon 
+    nuc = test_codon    
+    
+    ##position and equilibrate defects
+    break_positions = np.zeros( L )
+    bphash          = {}
+    nBreaks         = int(L/3)
+    for i in range(nBreaks):
+        ii = np.random.randint(L)
+        while break_positions[ii] != 0:
+            ii = np.random.randint(L)
+        break_positions[ii] = 1
+        bphash[i]           = ii
+    print_posns(break_positions)
+
+    ##equilibrate
+    n_mcSteps  = converge_timescale*nBreaks
+    if i_iter == 0:
+        n_mcSteps *= 5 ##first run is extra long.
+    iB_posn    = np.random.randint(nBreaks, size=(n_mcSteps))
+    new_posn_A = np.random.randint(L,       size=(n_mcSteps))
+    log_p_acc  = np.log(np.random.random(size=(n_mcSteps)))
+
+    print("#equilibrating %i" % i_iter)
+    U = 0.
+    for step in range(n_mcSteps):
+        new_posn = new_posn_A[step]
+        if break_positions[new_posn] == 1:
+                continue
+            
+        iB       = iB_posn[step]
+        old_posn = bphash[iB]
+            
+        Unew = -1*honig_comp[dna_sequence[new_posn]+\
+                                  dna_sequence[(new_posn+1)%L]]
+        Uold = -1*honig_comp[dna_sequence[old_posn]+\
+                                  dna_sequence[(old_posn+1)%L]]
+   
+        ##do an MC  .. Metropolis
+        if log_p_acc[step] < (Uold - Unew):
+                accept_count += 1   
+                break_positions[new_posn] = 1
+                break_positions[old_posn] = 0
+                bphash[iB]                = new_posn
+                U += Unew - Uold
+        if step % (3*nBreaks) == 0:
+            print("   %i %f" % (step, U))
+
+    ##convolve the test codon along the reservoir sequence
+    ##as a way to test different environments for the codon.        
+    for insert_posn in range(0, L-3, 3):
+        
+        oldCodon = np.copy(dna_sequence[insert_posn:insert_posn+3])
+        dna_sequence[insert_posn:insert_posn+3] =\
+                    [test_codon[0],test_codon[1],test_codon[2]]
+            
+        ##re-equilibrate at each move of the test codon
+        n_mcSteps  = 2 * converge_timescale * nBreaks
+        iB_posn    = np.random.randint(nBreaks, size=(n_mcSteps))
+        new_posn_A = np.random.randint(L, size=(n_mcSteps))
+        log_p_acc  = np.log(np.random.random(size=(n_mcSteps)))
+        for step in range(n_mcSteps):
+            
+            new_posn = new_posn_A[step]
+            if break_positions[new_posn] == 1:
+                continue
+            iB       = iB_posn[step]
+            old_posn = bphash[iB]
+            
+            Unew = -1*honig_comp[\
+                         dna_sequence[new_posn]+dna_sequence[(new_posn+1)%L]]
+            Uold = -1*honig_comp[\
+                         dna_sequence[old_posn]+dna_sequence[(old_posn+1)%L]]
+    
+   
+            ##do an MC  .. Metropolis
+            if log_p_acc[step] < (Uold - Unew):
+                accept_count += 1   
+                break_positions[new_posn] = 1
+                break_positions[old_posn] = 0
+                bphash[iB]                = new_posn
+                U            += (Unew - Uold)
+            else:
+                reject_count += 1
+        
+            if step >= nBreaks * converge_timescale:
+               i = insert_posn
+               if break_positions[i-1] == 1 and \
+                  break_positions[i]   == 0 and \
+                  break_positions[i+1] == 0 and \
+                  break_positions[i+2] == 1:
+                  histogram += 1   
+               count += 1
+
+        ##restore state:
+        dna_sequence[insert_posn:insert_posn+3] = oldCodon
+   
+    ##log the output 
+    f.write("%i %i %s %e\n" % (i_iter, n_iter, test_codon, histogram/count))
+f.close()
+                 
+
+        
