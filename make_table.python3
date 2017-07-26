@@ -1,0 +1,406 @@
+#!/usr/bin/env python3 
+
+##########################################################
+#
+# (c) University of Luxembourg 2017
+#
+# Software by Joshua T Berryman and Amirhossein Taghavi
+#
+# Licence: Attribution-ShareAlike 4.0 International
+#
+# The full licence is available at this link:
+# https://creativecommons.org/licenses/by-sa/4.0/legalcode
+#
+# In summary you may freely use and modify the software,
+# providing you do not seek to distribute derivative works
+# on more restrictive terms, and providing also that you
+# attribute the original authors.
+#
+# The preferred citation is:
+#
+# A Taghavi, P van der Schoot and J T Berryman,  
+# QRB Discovery, 2017.
+#
+# The journal is open access, you can look it up.
+#
+##########################################################
+
+import numpy as np
+import sys
+
+
+#input file from bash script (MC_combi_plot.bash)
+if len(sys.argv) == 2:
+    dataset = sys.argv[1]
+else:
+    print('''
+    Usage: 
+    
+    ./make_table.py stem
+
+    where "stem" is a root name for a set 
+    of codon triplet propensities, eg "honig".
+
+    In this example, the wd would contain 64 
+    files of the form: GGC_honig.dat, GAC_honig.dat
+    etc etc.
+
+    (output from ./triplet_propensity.py)
+
+    All that this program does is build some nice 
+    tables in latex of the triplet propensities.
+
+''')
+    quit()
+#trip_pro.rstrip('\n')
+#trip_pro = list(map(float, trip_pro))
+
+wc    = {
+'C' : 'G',
+'G' : 'C',
+'A' : 'T',
+'T' : 'A',
+}
+
+code = {
+'GTA' : 'V',
+'GTT' : 'V',
+'GTG' : 'V',
+'GTC' : 'V',
+'GCA' : 'A',
+'GCT' : 'A',
+'GCG' : 'A',
+'GCC' : 'A',
+'GAA' : 'E',
+'GAT' : 'D',
+'GAG' : 'E',
+'GAC' : 'D',
+'GGA' : 'G',
+'GGT' : 'G',
+'GGG' : 'G',
+'GGC' : 'G',
+'ATA' : 'I',
+'ATT' : 'I',
+'ATG' : 'M',
+'ATC' : 'I',
+'ACA' : 'T',
+'ACT' : 'T',
+'ACG' : 'T',
+'ACC' : 'T',
+'AAA' : 'K',
+'AAT' : 'N',
+'AAG' : 'K',
+'AAC' : 'N',
+'AGA' : 'R',
+'AGT' : 'S',
+'AGG' : 'R',
+'AGC' : 'S',
+'CTA' : 'L',
+'CTT' : 'L',
+'CTG' : 'L',
+'CTC' : 'L',
+'CCA' : 'P',
+'CCT' : 'P',
+'CCG' : 'P',
+'CCC' : 'P',
+'CAA' : 'Q',
+'CAT' : 'H',
+'CAG' : 'Q',
+'CAC' : 'H',
+'CGA' : 'R',
+'CGT' : 'R',
+'CGG' : 'R',
+'CGC' : 'R',
+'TTA' : 'L',
+'TTT' : 'F',
+'TTG' : 'L',
+'TTC' : 'F',
+'TCA' : 'S',
+'TCT' : 'S',
+'TCG' : 'S',
+'TCC' : 'S',
+'TAA' : 'X',
+'TAT' : 'Y',
+'TAG' : 'X',
+'TAC' : 'Y',
+'TGA' : 'X',
+'TGT' : 'C',
+'TGG' : 'Y',
+'TGC' : 'C',
+}
+
+phase_one_aa = {
+'L' : 1,
+'S' : 1,
+'P' : 1,
+'I' : 1,
+'T' : 1,
+'V' : 1,
+'A' : 1,
+'D' : 1,
+'E' : 1,
+'G' : 1,
+}
+phase_zero_aa = {
+'V' : 1,
+'A' : 1,
+'D' : 1,
+'G' : 1,
+}
+
+aa_name = {
+    'V' : "Val",
+    'A' : "Ala",
+    'D' : "Asp",
+    'G' : "Gly",
+    'E' : "Glu",
+    'S' : "Ser",
+    'P' : "Pro",
+    'L' : "Leu",
+    'I' : "Ile",
+    'T' : "Thr",
+    'R' : "Arg",
+    'N' : "Asn",
+    'C' : "Cys",
+    'Q' : "Gln",
+    'H' : "His",
+    'K' : "Lys",
+    'M' : "Met",
+    'F' : "Phe",
+    'T' : "Thr",
+    'W' : "Trp",
+    'Y' : "Tyr",
+    'X' : "Stop Codon",}
+
+
+#get the complementary base pair
+def get_comp(b1, b2, b3):
+    c3 = wc[b1]
+    c2 = wc[b2]
+    c1 = wc[b3]
+    
+    return c1,c2,c3 
+
+mod_aa = ['T','T','T','T','T','C','A','T','G','T','A','T','T','A','C','C','A','T','C','A','C','C','A','A','C','A','G','A','A','T','A','A','C','A','A','A','A','A','G','T','G','T','T','G','C','C','G','T','C','G','C','C','G','A','C','G','G','A','G','A','T','A','A','T','A','G','T','G','A','T','G','G']
+
+
+trips   = []
+P_trips = []
+phaseList = []
+phaseHash = {}
+aaList  = []
+props   = {}
+##print trip_pro for phase one aa.
+for codon in code.keys():
+
+    file = open(codon+"_"+dataset+".log", "r")
+    for line in file:
+        if codon in line:
+            p = float(line.split()[-1])
+    file.close()
+
+    b1,b2,b3 = codon[0],codon[1],codon[2]
+    c1,c2,c3 = get_comp(b1, b2, b3)
+
+    trip_pro = p ##np.log(p)
+    props[codon] = p
+
+    print("%s trip_pro %e" % (codon,trip_pro))
+    P_trips.append(trip_pro)
+    
+    if code[b1+b2+b3] in phase_one_aa:
+        if code[b1+b2+b3] in phase_zero_aa:
+            phase1 = "\Ankh "
+        else:
+            phase1 = "*  "
+    else:
+        phase1 = ".  "  
+    if code[c1+c2+c3] in phase_one_aa:
+        if code[c1+c2+c3] in phase_zero_aa:
+            phase2 = "\Ankh "
+        else:
+            phase2 = "*  "
+    else:
+        phase2 = ".  "
+        
+    trips.append(b1+b2+b3+"  .  "+c3+c2+c1+\
+                 "    "+code[b1+b2+b3]+phase1+\
+                 "    "+code[c1+c2+c3]+phase2)
+    phaseList.append(phase1)
+    phaseHash[code[codon]] = phase1
+    aaList.append(code[codon])
+
+P_trips = np.array(P_trips)
+#P_trips = np.log(P_trips)
+index   = np.argsort(P_trips)
+P_norm  = 1./np.sum(P_trips)
+print("P_norm",P_norm)
+print("P_trips HERE:",P_trips)    
+    
+
+     
+###3D list of cells, by 1 2 3 base of codon
+cells = {
+    'T':{ 'T':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'A':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'G':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'C':{'T':{},  'A':{}, 'G':{},  'C':{}}  },
+    'C':{ 'T':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'A':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'G':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'C':{'T':{},  'A':{}, 'G':{},  'C':{}}  },
+    'A':{ 'T':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'A':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'G':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'C':{'T':{},  'A':{}, 'G':{},  'C':{}}  },
+    'G':{ 'T':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'A':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'G':{'T':{},  'A':{}, 'G':{},  'C':{}},\
+          'C':{'T':{},  'A':{}, 'G':{},  'C':{}}  },
+}
+
+grey_fm=r'{\cellcolor[gray]{%.3f}}%s%s'
+
+for i in index:
+    cod1 = trips[i][:3]
+#    cod2 = trips[i][10:7:-1]
+#    aa1  = trips[i][15:17]
+#    aa2  = trips[i][22:]
+    #greyLevel = min(0.3 + 0.7*((P_trips[i]*P_norm)/0.1), 1.0)
+    greyLevel = min(0.3 + 0.7*((P_trips[i]*P_norm)/0.03), 1.0)
+    cells[cod1[0]][cod1[1]][cod1[2]] = grey_fm %\
+                           (greyLevel, aaList[i], phaseList[i])
+##    cells[cod2[0]][cod2[1]][cod2[2]] = grey_fm % (greyLevel, aa2)    
+
+
+
+f = open("table_%s.tex" % dataset, "w")
+f.write(r'''
+\documentclass[12pt,a4paper]{standalone}
+\usepackage{mathtools}
+\usepackage{relsize}
+\usepackage[colorlinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{marvosym}
+%%nice color-coded cells for codon table
+\usepackage{xcolor,colortbl}
+\usepackage{multirow}
+\usepackage{rotating}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+'''
+)
+
+f.write(r'''\begin{document}
+\begin{tabular}{  l | l | c  c  c  c |  c | l}
+\multicolumn{5}{c}{Base 3}\\
+\cline{3-6}
+\multicolumn{2}{c|}{}&
+\multicolumn{1}{c|}{T}&
+\multicolumn{1}{c|}{C}&
+\multicolumn{1}{c|}{A}&
+\multicolumn{1}{c|}{G}\\
+''')
+f.write("\n")
+
+
+for row in ['T', 'C', 'A', 'G',]:
+    f.write(r'\cline{2-7}')
+    f.write("\n")
+
+    if row == 'T':
+        f.write(r'''
+        \multirow{16}{*}{\begin{sideways}Base 1\end{sideways}}  
+               ''')
+        f.write("\n")
+    
+    for subRow in ['T', 'C', 'A', 'G']:
+        if subRow == 'A':
+            rowHead = '&%s' % row
+        else:
+            rowHead = '& '
+        
+        f.write("%s  & " % rowHead)
+        for col in ['T', 'C', 'A', 'G']:
+            ## middle letter is least important: so is subrow.
+            cod   = row+subRow+col
+            cell  = cells[cod[0]][cod[1]][cod[2]]
+            f.write("%s &" % cell) 
+        
+        if row == 'T' and subRow == 'T':
+            f.write(r'''%s & \multirow{16}{*}{\begin{turn}{270}Base 2\end{turn}} 
+                 \\''' % subRow)
+            f.write("\n")
+        else:
+            f.write("  %s\\\\ \n" % subRow)
+f.write(r'\cline{2-7}')
+f.write("\n")
+f.write(r'''\end{tabular}
+            \\
+            \end{document}''')
+f.write("\n")
+f.close()
+
+
+
+f = open("table1_%s.tex" % dataset, "w")
+f.write(r'''
+\documentclass[12pt,a4paper]{standalone}
+\usepackage{mathtools}
+\usepackage{relsize}
+\usepackage[colorlinks]{hyperref}
+\usepackage{graphicx}
+\usepackage{marvosym}
+%%nice color-coded cells for codon table
+\usepackage{xcolor,colortbl}
+\usepackage{multirow}
+\usepackage{rotating}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+'''
+)
+
+f.write(r'''\begin{document}
+\begin{tabular}{  c | c | c }
+''')
+f.write(r'Amino Acid & codon $\cdot$ anticodon&$\Delta G_\tau$ /$k_BT$\\')
+f.write("\n")
+f.write(r'\hline ')
+f.write("\n")
+
+
+AAprops = {}
+AAcod = {}
+
+for row in ['T', 'C', 'A', 'G',]:
+    for subRow in ['T', 'C', 'A', 'G']:
+        for col in ['T', 'C', 'A', 'G']:
+            ## middle letter is least important: so is subrow.
+            cod   = row+subRow+col
+            AA    = code[cod]
+            if AA in AAprops:
+                if props[cod] > AAprops[AA]:
+                    AAprops[AA]  = props[cod]
+                    AAcod[AA]    = cod
+            else:
+                AAprops[AA]  = props[cod]
+                AAcod[AA]    = cod
+
+
+aaList = AAprops.keys()
+for aa in sorted(AAprops, key=AAprops.get, reverse=True):
+    if aa == "X":
+        continue
+    cod = AAcod[aa]
+    complement = "%s%s%s" % (wc[cod[2]],wc[cod[1]],wc[cod[0]])
+    f.write(r'%s%s & {\small %s}$\cdot${\small %s}&%.2f\\' %\
+          (aa, phaseHash[aa], AAcod[aa], complement, -np.log(AAprops[aa])))
+    f.write("\n")
+
+f.write(r'''\end{tabular}
+            \\
+            \end{document}''')
+f.write("\n")
+f.close()
+
+
